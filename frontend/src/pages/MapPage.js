@@ -19,8 +19,8 @@ const defaultCenter = {
 const categoryIcons = {
   'News': <FaNewspaper />,
   'Business': <FaStore />,
-  'Cause': <FaHandHoldingHeart />,
-  'Event': <FaCalendarDay />,
+  'Causes': <FaHandHoldingHeart />,
+  'Events': <FaCalendarDay />,
   'Crime & Safety': <FaShieldAlt />
 };
 
@@ -28,8 +28,8 @@ const categoryIcons = {
 const categoryClasses = {
   'News': 'news',
   'Business': 'business',
-  'Cause': 'cause',
-  'Event': 'event',
+  'Causes': 'causes',
+  'Events': 'events',
   'Crime & Safety': 'crime'
 };
 
@@ -55,8 +55,8 @@ const MapPage = () => {
   const [activeCategories, setActiveCategories] = useState({
     'News': true,
     'Business': true,
-    'Cause': true,
-    'Event': true,
+    'Causes': true,
+    'Events': true,
     'Crime & Safety': true
   });
 
@@ -80,28 +80,46 @@ const MapPage = () => {
     if (!searchQuery.trim()) return;
 
     try {
-      const response = await api.get(`/news/search?location=${encodeURIComponent(searchQuery)}`);
+      // First, try to directly search for news by location
+      console.log(`Searching for news near: ${searchQuery}`);
+      const searchParams = new URLSearchParams({
+        location: searchQuery,
+        radius: 15 // Use a larger radius to ensure we find results
+      });
+      
+      // Use GET with query parameters
+      const response = await api.get(`/news/search?${searchParams.toString()}`);
+      
       if (response.data && response.data.length > 0) {
+        console.log(`Found ${response.data.length} news items near ${searchQuery}`);
         // Get coordinates from first result
         const firstItem = response.data[0];
         setCenter({ lat: firstItem.latitude, lng: firstItem.longitude });
         setZoom(13);
         setNewsItems(response.data);
-      } else {
-        // If no news items found, try to geocode the location
-        const geocodeResponse = await api.get(`/geocode?address=${encodeURIComponent(searchQuery)}`);
-        if (geocodeResponse.data) {
-          setCenter({ lat: geocodeResponse.data.lat, lng: geocodeResponse.data.lng });
-          setZoom(13);
-          // Load news near this location
-          const nearbyNews = await api.get(
-            `/news?lat=${geocodeResponse.data.lat}&lng=${geocodeResponse.data.lng}&radius=10`
-          );
-          setNewsItems(nearbyNews.data);
-        }
+        return; // Exit if we found news items
       }
     } catch (error) {
-      console.error('Error searching:', error);
+      console.log(`Search failed for ${searchQuery}, falling back to all news: ${error.message}`);
+      // If search failed, we'll fall back to showing all news and focusing on Huntington
+    }
+
+    try {
+      // If search failed or returned no results, load all news items and center on Huntington
+      const response = await api.get('/news');
+      setNewsItems(response.data);
+      
+      // Center on default Huntington location
+      setCenter(defaultCenter);
+      setZoom(12);
+      
+      // If the search was specifically for Huntington, don't show an alert
+      if (!searchQuery.toLowerCase().includes('huntington')) {
+        alert(`No specific news found for "${searchQuery}". Showing all Huntington area news instead.`);
+      }
+    } catch (error) {
+      console.error('Error loading all news items:', error);
+      alert('Error searching for news. Please try again later.');
     }
   }, [searchQuery]);
 
@@ -176,14 +194,14 @@ const MapPage = () => {
             <FaStore /> Business
           </button>
           <button
-            onClick={() => toggleCategory('Cause')}
-            className={`category-filter cause ${activeCategories['Cause'] ? 'active' : ''}`}
+            onClick={() => toggleCategory('Causes')}
+            className={`category-filter causes ${activeCategories['Causes'] ? 'active' : ''}`}
           >
             <FaHandHoldingHeart /> Causes
           </button>
           <button
-            onClick={() => toggleCategory('Event')}
-            className={`category-filter event ${activeCategories['Event'] ? 'active' : ''}`}
+            onClick={() => toggleCategory('Events')}
+            className={`category-filter events ${activeCategories['Events'] ? 'active' : ''}`}
           >
             <FaCalendarDay /> Events
           </button>
@@ -246,19 +264,41 @@ const MapPage = () => {
                   {selectedItem.headline && (
                     <p className="text-sm font-medium my-1">{selectedItem.headline}</p>
                   )}
-                  <p className="text-sm mt-2">{selectedItem.summary}</p>
-                  {selectedItem.source_url && (
-                    <a 
-                      href={selectedItem.source_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary-600 hover:underline text-xs mt-2 block"
-                    >
-                      Source
-                    </a>
+                  
+                  {/* Description - Show full description when available */}
+                  {selectedItem.description && (
+                    <div className="mt-3 border-t pt-2">
+                      <h4 className="text-sm font-medium text-gray-700">Description:</h4>
+                      <p className="text-sm">{selectedItem.description}</p>
+                    </div>
                   )}
-                  <div className="mt-2 text-xs text-gray-500">
-                    {new Date(selectedItem.date_time).toLocaleString()}
+                  
+                  {/* Summary */}
+                  {selectedItem.summary && (
+                    <div className="mt-3 border-t pt-2">
+                      <h4 className="text-sm font-medium text-gray-700">Summary:</h4>
+                      <p className="text-sm">{selectedItem.summary}</p>
+                    </div>
+                  )}
+                  
+                  {/* Source URL - More prominent and descriptive */}
+                  {selectedItem.source_url && (
+                    <div className="mt-3 border-t pt-2">
+                      <h4 className="text-sm font-medium text-gray-700">Source URL:</h4>
+                      <a 
+                        href={selectedItem.source_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:underline text-sm overflow-hidden text-ellipsis block"
+                      >
+                        {selectedItem.source_url}
+                      </a>
+                    </div>
+                  )}
+                  
+                  {/* Date and time */}
+                  <div className="mt-3 border-t pt-2 text-xs text-gray-500">
+                    Posted: {new Date(selectedItem.date_time).toLocaleString()}
                   </div>
                 </div>
               </InfoWindow>
@@ -281,9 +321,9 @@ function getCategoryColor(category) {
       return '#2563EB'; // blue-600
     case 'Business':
       return '#16A34A'; // green-600
-    case 'Cause':
+    case 'Causes':
       return '#9333EA'; // purple-600
-    case 'Event':
+    case 'Events':
       return '#D97706'; // amber-600
     case 'Crime & Safety':
       return '#DC2626'; // red-600

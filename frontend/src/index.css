@@ -29,11 +29,11 @@ body {
   @apply bg-green-600;
 }
 
-.map-marker.cause {
+.map-marker.cause, .map-marker.causes {
   @apply bg-purple-600;
 }
 
-.map-marker.event {
+.map-marker.event, .map-marker.events {
   @apply bg-amber-600;
 }
 
@@ -66,19 +66,19 @@ body {
   @apply bg-green-600 text-white;
 }
 
-.category-filter.cause {
+.category-filter.cause, .category-filter.causes {
   @apply text-purple-600 border border-purple-600;
 }
 
-.category-filter.cause.active {
+.category-filter.cause.active, .category-filter.causes.active {
   @apply bg-purple-600 text-white;
 }
 
-.category-filter.event {
+.category-filter.event, .category-filter.events {
   @apply text-amber-600 border border-amber-600;
 }
 
-.category-filter.event.active {
+.category-filter.event.active, .category-filter.events.active {
   @apply bg-amber-600 text-white;
 }
 

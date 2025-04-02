@@ -38,10 +38,11 @@ app = FastAPI(
 # Add CORS middleware to allow frontend to connect
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*", "http://localhost:3000", "http://127.0.0.1:3000", "http://frontend:3000"],  # Include explicit origins 
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
 # Initialize services
@@ -49,10 +50,44 @@ ai_processor = AIProcessor()
 geolocator = Geolocator()
 news_scraper = NewsScraper(ai_processor, geolocator)
 
-# Health check endpoint
+# Comprehensive health check endpoint
 @app.get("/health")
-def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+def health_check(db: Session = Depends(get_db)):
+    try:
+        # Test database connection
+        db_status = "connected"
+        db_version = "unknown"
+        try:
+            # Try to get the database version
+            result = db.execute("SELECT version();").scalar()
+            if result:
+                db_version = result.split(",")[0]
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+        
+        # Get service availability status
+        services = {
+            "database": db_status,
+            "geolocation": "available" if geolocator is not None else "unavailable",
+            "ai_processor": "available" if ai_processor is not None else "unavailable",
+        }
+        
+        # Return comprehensive health information
+        return {
+            "status": "healthy",
+            "version": "1.0.0",
+            "timestamp": datetime.now().isoformat(),
+            "services": services,
+            "db_version": db_version,
+            "environment": os.environ.get("ENVIRONMENT", "development")
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e)
+        }
 
 # News items endpoints
 @app.get("/news", response_model=List[NewsItemResponse])
@@ -97,21 +132,47 @@ def create_news_item(item: NewsItemCreate, db: Session = Depends(get_db)):
     return db_item
 
 @app.get("/news/search", response_model=List[NewsItemResponse])
-def search_location(query: LocationSearch, db: Session = Depends(get_db)):
-    """Search for news items near a location"""
+def search_location(
+    location: str,
+    category: Optional[str] = None,
+    radius: Optional[float] = 10.0,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(get_db)
+):
+    """Search for news items near a location using query parameters"""
+    logger.info(f"Searching for news near location: {location}")
+    
     # Get coordinates for the location
-    coordinates = geolocator.geocode(query.location)
+    coordinates = geolocator.geocode(location)
     if not coordinates:
+        logger.warning(f"Location not found: {location}")
         raise HTTPException(status_code=404, detail="Location not found")
     
     lat, lng = coordinates
+    logger.info(f"Geocoded location {location} to coordinates: {lat}, {lng}")
     
     # Query database for items within radius
-    return get_news_items(
-        category=query.category,
+    results = get_news_items(
+        category=category,
         lat=lat,
         lng=lng,
-        radius=query.radius or 10,  # Default 10km radius
+        radius=radius,  # Default 10km radius
+        start_date=start_date,
+        end_date=end_date,
+        db=db
+    )
+    
+    logger.info(f"Found {len(results)} news items near {location}")
+    return results
+
+@app.post("/news/search", response_model=List[NewsItemResponse])
+def search_location_post(query: LocationSearch, db: Session = Depends(get_db)):
+    """Search for news items near a location using POST body"""
+    return search_location(
+        location=query.location,
+        category=query.category,
+        radius=query.radius,
         start_date=query.start_date,
         end_date=query.end_date,
         db=db
@@ -308,11 +369,21 @@ async def get_comprehensive_huntington_news(db: Session = Depends(get_db)):
 @app.get("/huntington-news", response_model=List[NewsItemResponse])
 async def get_huntington_news(db: Session = Depends(get_db)):
     """Get hyperlocal news specifically for Huntington, Long Island"""
-    # Create an instance of the scraper with required services
-    news_scraper = NewsScraper(ai_processor, geolocator)
+    logger.info("Retrieving Huntington news from database and comprehensive sources")
     
-    # Use the Huntington-specific optimizations in the fetch_from_newsapi method
-    news_items = await news_scraper.fetch_from_newsapi("Huntington", db)
+    # First, try to get news items from the database
+    news_items = db.query(NewsItem).all()
+    
+    # If we don't have at least 5 items, fetch comprehensive news
+    if not news_items or len(news_items) < 5:
+        logger.info(f"Only found {len(news_items) if news_items else 0} items in database. Fetching comprehensive news...")
+        # Create an instance of the scraper with required services
+        news_scraper = NewsScraper(ai_processor, geolocator)
+        
+        # Use the comprehensive method that combines all sources
+        news_items = await news_scraper.fetch_huntington_news(db)
+    else:
+        logger.info(f"Found {len(news_items)} news items in database. Using existing data.")
     
     return news_items
 

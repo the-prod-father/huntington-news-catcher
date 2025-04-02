@@ -106,6 +106,102 @@ class RSSFeedService:
             logger.error(f"Error fetching Google News RSS: {str(e)}")
             return []
     
+    def fetch_huntington_now_rss(self) -> List[Dict[str, Any]]:
+        """
+        Fetch news from HuntingtonNow RSS feed.
+        
+        Returns:
+            List of processed news articles
+        """
+        url = "https://huntingtonnow.com/feed"
+        logger.info(f"Fetching HuntingtonNow RSS from {url}")
+        
+        try:
+            # Add a timeout to avoid hanging
+            feed = feedparser.parse(url, timeout=10)
+            articles = []
+            
+            if not feed.entries:
+                logger.warning(f"No entries found in HuntingtonNow RSS feed: {url}")
+                # Try with a different user agent
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+                }
+                response = requests.get(url, headers=headers, timeout=10)
+                feed = feedparser.parse(response.content)
+            
+            for entry in feed.entries:
+                article = self._process_huntington_now_entry(entry)
+                if article:
+                    articles.append(article)
+            
+            logger.info(f"Successfully fetched {len(articles)} articles from HuntingtonNow")
+            return articles
+        except Exception as e:
+            logger.error(f"Error fetching HuntingtonNow RSS: {str(e)}")
+            return []
+    
+    def _process_huntington_now_entry(self, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Process a single entry from HuntingtonNow RSS feed.
+        
+        Args:
+            entry: RSS feed entry
+            
+        Returns:
+            Processed article or None if not relevant
+        """
+        try:
+            # Extract content from entry
+            title = entry.get('title', '')
+            link = entry.get('link', '')
+            summary = entry.get('summary', '')
+            
+            # Clean up the summary
+            summary = BeautifulSoup(summary, 'html.parser').get_text()
+            
+            # Get content if available
+            content = ''
+            if 'content' in entry:
+                content = entry['content'][0]['value']
+                content = BeautifulSoup(content, 'html.parser').get_text()
+            
+            # Parse the published date
+            published = entry.get('published', '')
+            if published:
+                try:
+                    date_time = datetime.strptime(published, '%a, %d %b %Y %H:%M:%S %z')
+                except ValueError:
+                    try:
+                        date_time = datetime.strptime(published, '%a, %d %b %Y %H:%M:%S %Z')
+                    except ValueError:
+                        date_time = datetime.now(self.eastern_tz)
+            else:
+                date_time = datetime.now(self.eastern_tz)
+                
+            # Determine category
+            category = self._determine_category(title, summary + content)
+            
+            # Set specific Huntington coordinates
+            huntington_coords = (40.8687, -73.4265)  # Center of Huntington
+            
+            return {
+                'title': title,
+                'source_url': link,
+                'summary': summary[:500],  # Limit summary length
+                'description': content[:2000] if content else summary[:2000],  # Use content as description if available
+                'date_time': date_time.isoformat(),
+                'category': category,
+                'source_name': 'HuntingtonNow',
+                'latitude': huntington_coords[0],
+                'longitude': huntington_coords[1],
+                'location': 'Huntington, NY',
+                'confidence_score': 0.9  # High confidence for direct Huntington source
+            }
+        except Exception as e:
+            logger.error(f"Error processing HuntingtonNow entry: {str(e)}")
+            return None
+    
     def fetch_all_huntington_sources(self) -> List[Dict[str, Any]]:
         """
         Fetch news from all configured sources for Huntington, NY.
@@ -115,17 +211,25 @@ class RSSFeedService:
         """
         all_articles = []
         
+        # Fetch from HuntingtonNow
+        huntington_now_articles = self.fetch_huntington_now_rss()
+        all_articles.extend(huntington_now_articles)
+        logger.info(f"Added {len(huntington_now_articles)} articles from HuntingtonNow")
+        
         # Fetch from Patch.com
         patch_articles = self.fetch_patch_rss("huntington")
         all_articles.extend(patch_articles)
+        logger.info(f"Added {len(patch_articles)} articles from Patch")
         
         # Fetch from Newsday
         newsday_articles = self.fetch_newsday_rss()
         all_articles.extend(newsday_articles)
+        logger.info(f"Added {len(newsday_articles)} articles from Newsday")
         
         # Fetch from Google News
         google_articles = self.fetch_google_news_rss("Huntington Long Island NY")
         all_articles.extend(google_articles)
+        logger.info(f"Added {len(google_articles)} articles from Google News")
         
         # Remove duplicates based on title similarity
         unique_articles = self._remove_duplicates(all_articles)
@@ -392,7 +496,7 @@ class RSSFeedService:
             content: Article content or summary
             
         Returns:
-            Category (News, Business, Cause, Event, or Crime & Safety)
+            Category (News, Business, Causes, Events, or Crime & Safety)
         """
         combined_text = (title + " " + content).lower()
         
@@ -401,7 +505,7 @@ class RSSFeedService:
                          'ceremony', 'celebration', 'workshop', 'meeting', 'conference',
                          'gathering', 'upcoming', 'schedule']
         if any(keyword in combined_text for keyword in event_keywords):
-            return 'Event'
+            return 'Events'
         
         # Check for business
         business_keywords = ['business', 'company', 'store', 'shop', 'restaurant', 'cafe',
@@ -422,7 +526,7 @@ class RSSFeedService:
                          'community service', 'campaign', 'awareness', 'support', 'cause',
                          'drive', 'helping', 'benefit']
         if any(keyword in combined_text for keyword in cause_keywords):
-            return 'Cause'
+            return 'Causes'
         
         # Default to News
         return 'News'

@@ -116,8 +116,23 @@ class AIProcessor:
         """Create AI prompt for information extraction"""
         return f"""
         Analyze the following local news content and extract structured information.
-        Focus only on hyper-local community information - news, events, businesses, causes/charities, and crime/safety.
-        Strictly exclude national news, politics, and professional sports.
+        FOCUS ONLY on hyper-local community information from HUNTINGTON, NY AND THESE SURROUNDING TOWNS ONLY:
+        - Huntington, NY
+        - Huntington Station, NY
+        - Cold Spring Harbor, NY
+        - Northport, NY
+        - Melville, NY
+        - East Northport, NY
+        - Centerport, NY
+        - Lloyd Harbor, NY
+        - Greenlawn, NY
+        - Dix Hills, NY
+        - Commack, NY
+        - Elwood, NY
+        
+        ONLY extract information about: local news, events, businesses, causes/charities, and crime/safety.
+        STRICTLY EXCLUDE content that is not specifically about the Huntington area.
+        STRICTLY EXCLUDE national news, politics, professional sports, and content about other regions.
         
         Source URL: {source_url}
         
@@ -130,12 +145,13 @@ class AIProcessor:
             "headline": "Secondary headline or subheading if available",
             "description": "Detailed description of the event/news",
             "summary": "Brief 1-2 sentence summary",
-            "category": "Must be one of: News, Business, Cause, Event, Crime & Safety",
-            "location": "Specific location mentioned in the text",
+            "category": "Must be one of: News, Business, Causes, Events, Crime & Safety",
+            "location": "SPECIFIC location mentioned in the text - MUST BE in Huntington area only",
             "confidence_score": "A score from 0.0 to 1.0 indicating confidence in extraction accuracy",
-            "excluded_reason": "If this is national news, politics, or sports, explain why it's excluded"
+            "excluded_reason": "If not about Huntington area or if national news/politics/sports, explain why it's excluded"
         }}
         
+        If the content doesn't explicitly mention Huntington or one of the listed towns, include an excluded_reason.
         Only return valid JSON format, nothing else.
         """
     
@@ -166,7 +182,7 @@ class AIProcessor:
                 result["summary"] = line.split(":", 1)[1].strip()
             elif line.startswith("Category:") or line.startswith("category:"):
                 category = line.split(":", 1)[1].strip()
-                valid_categories = ["News", "Business", "Cause", "Event", "Crime & Safety"]
+                valid_categories = ["News", "Business", "Causes", "Events", "Crime & Safety"]
                 result["category"] = category if category in valid_categories else "News"
             elif line.startswith("Location:") or line.startswith("location:"):
                 result["location"] = line.split(":", 1)[1].strip()
