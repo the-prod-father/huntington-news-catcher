@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply text-gray-800 bg-gray-50;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom map marker styles */
+.map-marker {
+  @apply flex items-center justify-center rounded-full w-8 h-8 text-white font-bold cursor-pointer shadow-lg;
+  transition: transform 0.2s;
+}
+
+.map-marker:hover {
+  transform: scale(1.2);
+  z-index: 10;
+}
+
+.map-marker.news {
+  @apply bg-blue-600;
+}
+
+.map-marker.business {
+  @apply bg-green-600;
+}
+
+.map-marker.cause {
+  @apply bg-purple-600;
+}
+
+.map-marker.event {
+  @apply bg-amber-600;
+}
+
+.map-marker.crime {
+  @apply bg-red-600;
+}
+
+/* Category filter buttons */
+.category-filter {
+  @apply px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-2;
+}
+
+.category-filter.active {
+  @apply text-white;
+}
+
+.category-filter.news {
+  @apply text-blue-600 border border-blue-600;
+}
+
+.category-filter.news.active {
+  @apply bg-blue-600 text-white;
+}
+
+.category-filter.business {
+  @apply text-green-600 border border-green-600;
+}
+
+.category-filter.business.active {
+  @apply bg-green-600 text-white;
+}
+
+.category-filter.cause {
+  @apply text-purple-600 border border-purple-600;
+}
+
+.category-filter.cause.active {
+  @apply bg-purple-600 text-white;
+}
+
+.category-filter.event {
+  @apply text-amber-600 border border-amber-600;
+}
+
+.category-filter.event.active {
+  @apply bg-amber-600 text-white;
+}
+
+.category-filter.crime {
+  @apply text-red-600 border border-red-600;
+}
+
+.category-filter.crime.active {
+  @apply bg-red-600 text-white;
+}
